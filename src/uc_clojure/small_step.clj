@@ -3,22 +3,24 @@
 
   This namespace contains functions and data structures for implementing small
   step semantics as per the Small Step Semantics subsection under section 1.2
-  of Understanding Computation."
+  of Tom Stuart's ``Understanding Computation''."
   (:require [clojure.string :as string]))
 
 (def expressions [:number :boolean :add :multiply :less-than :variable])
 
 (def statements [:if :assign :do-nothing :sequence :while])
 
-;; a construct is either an expression (which does not modify the environment)
-;; or a statement (which does modify the environment).
+;; A "construct" is my own generalization over either an expression or a
+;; statement.
+;; There is probably a correct term for it.
+;; An expression does not modify the environment.
+;; A statement does modify the environment.
 (defn get-construct-kind
   [construct-type]
   (cond
-    (some #{construct-type} expressions)
-    :expression
-    :else
-    :statement))
+    (some #{construct-type} expressions) :expression
+    (some #{construct-type} statements) :statement
+    :else :unknown-construct-kind))
 
 ;; Constructors for primitive syntactic constructs (which are just Clojure maps)
 
@@ -235,13 +237,28 @@
          (conj ret [(to-str construct) (-> m :environment env-to-str)]))
        (conj ret [(to-str construct) (-> m :environment env-to-str)])))))
 
+(defn get-ret
+  [m] (-> m run last))
+
+(defn get-ret-all
+  [machines] (list (for [m machines] (get-ret m))))
+
 (defn run-print
   [m]
   (println (string/join "\n"
                         (map (fn [p] (string/join ", " p)) (run m)))))
 
+(defn run-print-all [machines]
+  (doseq [m machines]
+    (run-print m)
+    (println "\n")))
+
+(defn run-all [machines]
+  (for [m machines] (run m)))
+
 ;; Some sample machines and constructs (i.e., expressions and statements)
 
+;; (1 * 2) + (3 * 4)
 (def machine-1
   {:construct
    (add-
@@ -253,6 +270,9 @@
      (number- 4)))
    :environment {}})
 
+(def machine-1-result ["14" {}])
+
+;; (< 5 (+ 2 2))
 (def machine-2
   {:construct
    (less-than-
@@ -262,6 +282,9 @@
      (number- 2)))
    :environment {}})
 
+(def machine-2-result ["false" {}])
+
+;; (< x (+ y y)), where x = 5 and y = 2
 (def machine-3
   {:construct
    (less-than-
@@ -272,6 +295,9 @@
    :environment {:x (number- 5)
                  :y (number- 2)}})
 
+(def machine-3-result ["false" {:x "5", :y "2"}])
+
+;; x = (+ x 1), where x = 2
 (def machine-4
   {:construct
    (assign-
@@ -281,6 +307,9 @@
      (number- 1)))
    :environment {:x (number- 2)}})
 
+(def machine-4-result ["do-nothing" {:x "3"}])
+
+;; if (x) { y = 1 } else { y = 2}, where x is true
 (def machine-5
   {:construct
    (if-
@@ -289,6 +318,9 @@
     (assign- :y (number- 2)))
    :environment {:x (boolean- true)}})
 
+(def machine-5-result ["do-nothing" {:x "true", :y "1"}])
+
+;; if (x) { y = 1 }, where x is false
 (def machine-6
   {:construct
    (if-
@@ -297,6 +329,9 @@
     (do-nothing-))
    :environment {:x (boolean- false)}})
 
+(def machine-6-result ["do-nothing" {:x "false"}])
+
+;; x = (+ 1 1); y = (+ x 3)
 (def machine-7
   {:construct
    (sequence-
@@ -304,12 +339,17 @@
     (assign- :y (add- (variable- :x) (number- 3))))
    :environment {}})
 
+(def machine-7-result ["do-nothing" {:x "2", :y "5"}])
+
+;; while (< x 5) { x = (* x 3)}, where x = 1
 (def machine-8
   {:construct
    (while-
     (less-than- (variable- :x) (number- 5))
     (assign- :x (multiply- (variable- :x) (number- 3))))
    :environment {:x (number- 1)}})
+
+(def machine-8-result ["do-nothing" {:x "9"}])
 
 (def machine-bad
   {:construct
@@ -328,7 +368,14 @@
    machine-7
    machine-8])
 
-(defn run-print-all [machines]
-  (doseq [m machines]
-    (run-print m)
-    (println "\n")))
+;; Tests
+
+(def machine-results
+  [machine-1-result
+   machine-2-result
+   machine-3-result
+   machine-4-result
+   machine-5-result
+   machine-6-result
+   machine-7-result
+   machine-8-result])
